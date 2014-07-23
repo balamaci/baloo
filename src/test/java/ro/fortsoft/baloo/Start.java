@@ -5,6 +5,7 @@ import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
+import ro.fortsoft.baloo.strategy.DelayOnUnregisteredHostHandlingStrategy;
 import ro.fortsoft.baloo.httpclient.RequestLimitedHttpClient;
 
 /**
@@ -16,7 +17,7 @@ public class Start {
         String SAMPLE_URL = "https://google.de";
 
         RequestLimitedHttpClient instance = new RequestLimitedHttpClient(HttpClientBuilder.
-                create().build(), true);
+                create().build(), new DelayOnUnregisteredHostHandlingStrategy(1));
         instance.addLimit("google.de", 0.2);
 
         RequestConfig requestConfig = RequestConfig.custom()

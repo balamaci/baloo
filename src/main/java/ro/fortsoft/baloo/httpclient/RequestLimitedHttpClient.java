@@ -14,7 +14,11 @@ import org.apache.http.conn.ClientConnectionManager;
 import org.apache.http.params.HttpParams;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.Args;
+import ro.fortsoft.baloo.strategy.DoNothingOnUnregisteredHostHandlingStrategy;
+import ro.fortsoft.baloo.strategy.ThrowExceptionOnUnregisteredHostHandlingStrategy;
+import ro.fortsoft.baloo.strategy.UnregisteredHostHandlingStrategy;
 import ro.fortsoft.baloo.exception.UnregisteredRateLimitedHostException;
+import ro.fortsoft.baloo.strategy.DelayOnUnregisteredHostHandlingStrategy;
 
 import java.io.IOException;
 import java.net.URI;
@@ -30,17 +34,17 @@ public class RequestLimitedHttpClient implements HttpClient {
 
     private final HttpClient httpClient;
 
-    private final boolean throwExceptionForUnregisteredHost;
+    private final UnregisteredHostHandlingStrategy unregisteredHostHandlingStrategy;
 
     /**
      * Constr.
      * @param httpClient httpClient
-     * @param throwExceptionForUnregisteredHost if the request is to an unknown host that it's not registered with it's own limit
-     *                                thrown exception instead of
+     * @param unregisteredHostHandlingStrategy hot to handle if the request is to an unknown host that it's not
+     *                                         registered with it's own limit
      */
-    public RequestLimitedHttpClient(HttpClient httpClient, boolean throwExceptionForUnregisteredHost) {
+    public RequestLimitedHttpClient(HttpClient httpClient, UnregisteredHostHandlingStrategy unregisteredHostHandlingStrategy) {
         this.httpClient = httpClient;
-        this.throwExceptionForUnregisteredHost = throwExceptionForUnregisteredHost;
+        this.unregisteredHostHandlingStrategy = unregisteredHostHandlingStrategy;
     }
 
     @Override
@@ -139,12 +143,22 @@ public class RequestLimitedHttpClient implements HttpClient {
 
         RateLimiter rateLimiter = rateLimiters.get(host);
         if(rateLimiter == null) {
-            if(throwExceptionForUnregisteredHost) {
+            if(unregisteredHostHandlingStrategy instanceof DoNothingOnUnregisteredHostHandlingStrategy) {
+                return;
+            }
+            if(unregisteredHostHandlingStrategy instanceof ThrowExceptionOnUnregisteredHostHandlingStrategy) {
                 throw new UnregisteredRateLimitedHostException(host);
             }
-        } else {
-            rateLimiter.acquire();
+            if(unregisteredHostHandlingStrategy instanceof DelayOnUnregisteredHostHandlingStrategy) {
+                rateLimiter = RateLimiter.create(((DelayOnUnregisteredHostHandlingStrategy)
+                        unregisteredHostHandlingStrategy).getDelay());
+                rateLimiters.put(host, rateLimiter);
+            } else {
+                throw new RuntimeException("Unknown UnregisteredHostHandlingStrategy");
+            }
         }
+
+        rateLimiter.acquire();
     }
 
     /**
