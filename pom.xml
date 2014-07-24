@@ -12,7 +12,7 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <httpclient.version>4.3.1</httpclient.version>
+        <httpclient.version>4.3.2</httpclient.version>
         <guava.version>17.0</guava.version>
     </properties>
 
