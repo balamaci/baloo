@@ -14,11 +14,11 @@ import org.apache.http.conn.ClientConnectionManager;
 import org.apache.http.params.HttpParams;
 import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.Args;
+import ro.fortsoft.baloo.exception.UnregisteredRateLimitedHostException;
+import ro.fortsoft.baloo.strategy.DelayOnUnregisteredHostHandlingStrategy;
 import ro.fortsoft.baloo.strategy.DoNothingOnUnregisteredHostHandlingStrategy;
 import ro.fortsoft.baloo.strategy.ThrowExceptionOnUnregisteredHostHandlingStrategy;
 import ro.fortsoft.baloo.strategy.UnregisteredHostHandlingStrategy;
-import ro.fortsoft.baloo.exception.UnregisteredRateLimitedHostException;
-import ro.fortsoft.baloo.strategy.DelayOnUnregisteredHostHandlingStrategy;
 
 import java.io.IOException;
 import java.net.URI;
@@ -30,7 +30,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class RequestLimitedHttpClient implements HttpClient {
 
-    private Map<String, RateLimiter> rateLimiters = Maps.newConcurrentMap();
+    private final Map<String, RateLimiter> rateLimiters = Maps.newHashMap();
 
     private final HttpClient httpClient;
 
@@ -138,14 +138,11 @@ public class RequestLimitedHttpClient implements HttpClient {
         acquireRateLimitToken(httpHost);
     }
 
-    private void acquireRateLimitToken(HttpHost httpHost) throws ClientProtocolException {
+    private synchronized RateLimiter lookupRateLimit(HttpHost httpHost) throws UnregisteredRateLimitedHostException {
         String host = httpHost.getHostName();
-
         RateLimiter rateLimiter = rateLimiters.get(host);
+
         if(rateLimiter == null) {
-            if(unregisteredHostHandlingStrategy instanceof DoNothingOnUnregisteredHostHandlingStrategy) {
-                return;
-            }
             if(unregisteredHostHandlingStrategy instanceof ThrowExceptionOnUnregisteredHostHandlingStrategy) {
                 throw new UnregisteredRateLimitedHostException(host);
             }
@@ -157,6 +154,15 @@ public class RequestLimitedHttpClient implements HttpClient {
                 throw new RuntimeException("Unknown UnregisteredHostHandlingStrategy");
             }
         }
+
+        return rateLimiter;
+    }
+
+    private void acquireRateLimitToken(HttpHost httpHost) throws ClientProtocolException {
+        if(unregisteredHostHandlingStrategy instanceof DoNothingOnUnregisteredHostHandlingStrategy) {
+            return;
+        }
+        RateLimiter rateLimiter = lookupRateLimit(httpHost);
 
         rateLimiter.acquire();
     }
